@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caixa Pro - Edição Ativada</title>
+    <style>
+        :root { --entrada: #28a745; --saida: #dc3545; --fundo: #f0f2f5; }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--fundo); margin: 0; padding: 20px; display: flex; justify-content: center; }
+        .app-card { width: 100%; max-width: 400px; background: white; border-radius: 20px; padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        .saldo-card { background: #333; color: white; padding: 20px; border-radius: 15px; text-align: center; margin-bottom: 20px; }
+        input, select { width: 100%; padding: 15px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 10px; font-size: 16px; box-sizing: border-box; }
+        .acoes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+        .btn { padding: 15px; border: none; border-radius: 10px; color: white; font-weight: bold; cursor: pointer; }
+        .btn-entrada { background: var(--entrada); }
+        .btn-saida { background: var(--saida); }
+        .filtros { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 15px; border-bottom: 1px solid #eee; }
+        .chip { background: #eee; padding: 6px 15px; border-radius: 20px; font-size: 13px; cursor: pointer; white-space: nowrap; }
+        .chip.active { background: #333; color: white; }
+       
+        /* Estilo da Lista com botões de ação */
+        .transacao { display: flex; justify-content: space-between; align-items: center; padding: 12px 0; border-bottom: 1px solid #f1f1f1; }
+        .info { flex-grow: 1; }
+        .valor-txt { font-weight: bold; margin-bottom: 4px; display: block; }
+        .btn-acao { background: none; border: none; font-size: 18px; cursor: pointer; margin-left: 10px; padding: 5px; }
+        .btn-edit { color: #007bff; }
+        .btn-del { color: #dc3545; }
+    </style>
+</head>
+<body>
+
+<div class="app-card">
+    <div class="saldo-card">
+        <small id="labelFiltro">Saldo Total</small>
+        <h2 id="txtSaldo">R$ 0,00</h2>
+    </div>
+
+    <input type="number" id="valor" placeholder="Valor R$" inputmode="decimal">
+    <select id="categoria" onchange="checarNova(this)"></select>
+
+    <div class="acoes">
+        <button class="btn btn-entrada" onclick="adicionar(1)">+ ENTRADA</button>
+        <button class="btn btn-saida" onclick="adicionar(-1)">- SAÍDA</button>
+    </div>
+
+    <div class="filtros" id="listaFiltros"></div>
+    <div id="listaLogs"></div>
+</div>
+
+<script>
+    let dados = JSON.parse(localStorage.getItem('financas_dados')) || [];
+    let cats = JSON.parse(localStorage.getItem('financas_cats')) || ["Geral", "Mercadoria", "Pessoal"];
+    let filtroAtual = 'Tudo';
+
+    window.onload = () => { renderizarFiltros(); atualizarTela(); };
+
+    function renderizarFiltros() {
+        const f = document.getElementById('listaFiltros');
+        const s = document.getElementById('categoria');
+        f.innerHTML = `<div class="chip ${filtroAtual === 'Tudo' ? 'active' : ''}" onclick="filtrar('Tudo', this)">Tudo</div>`;
+        s.innerHTML = '';
+        cats.forEach(c => {
+            f.innerHTML += `<div class="chip ${filtroAtual === c ? 'active' : ''}" onclick="filtrar('${c}', this)">${c}</div>`;
+            s.innerHTML += `<option value="${c}">${c}</option>`;
+        });
+        s.innerHTML += `<option value="NOVA">+ CRIAR NOVA CAIXA</option>`;
+    }
+
+    function adicionar(tipo) {
+        let v = document.getElementById('valor').value;
+        let c = document.getElementById('categoria').value;
+        if (!v || v <= 0) return alert("Digite um valor");
+        dados.push({ id: Date.now(), valor: parseFloat(v) * tipo, cat: c, hora: new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}) });
+        salvar();
+    }
+
+    // --- NOVAS FUNÇÕES: EDITAR E EXCLUIR ---
+
+    function excluir(id) {
+        if (confirm("Deseja apagar este registro?")) {
+            dados = dados.filter(item => item.id !== id);
+            salvar();
+        }
+    }
+
+    function editar(id) {
+        let item = dados.find(i => i.id === id);
+        let novoValor = prompt("Novo valor (use sinal de menos para saída):", item.valor);
+        if (novoValor !== null && !isNaN(parseFloat(novoValor))) {
+            item.valor = parseFloat(novoValor);
+            salvar();
+        }
+    }
+
+    function salvar() {
+        localStorage.setItem('financas_dados', JSON.stringify(dados));
+        localStorage.setItem('financas_cats', JSON.stringify(cats));
+        document.getElementById('valor').value = '';
+        atualizarTela(filtroAtual);
+    }
+
+    function filtrar(cat, el) {
+        filtroAtual = cat;
+        document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+        el.classList.add('active');
+        atualizarTela(cat);
+    }
+
+    function atualizarTela(filtro = 'Tudo') {
+        const lista = document.getElementById('listaLogs');
+        const txtSaldo = document.getElementById('txtSaldo');
+        lista.innerHTML = '';
+        let soma = 0;
+
+        dados.slice().reverse().forEach(i => {
+            if (filtro === 'Tudo' || i.cat === filtro) {
+                soma += i.valor;
+                lista.innerHTML += `
+                    <div class="transacao">
+                        <div class="info">
+                            <span class="valor-txt" style="color: ${i.valor > 0 ? 'var(--entrada)' : 'var(--saida)'}">
+                                R$ ${Math.abs(i.valor).toFixed(2)}
+                            </span>
+                            <small>${i.cat} | ${i.hora}</small>
+                        </div>
+                        <button class="btn-acao btn-edit" onclick="editar(${i.id})">✎</button>
+                        <button class="btn-acao btn-del" onclick="excluir(${i.id})">🗑</button>
+                    </div>`;
+            }
+        });
+        txtSaldo.innerText = `R$ ${soma.toFixed(2)}`;
+    }
+
+    function checarNova(sel) {
+        if (sel.value === 'NOVA') {
+            let n = prompt("Nome da nova caixa:");
+            if (n) { cats.push(n); renderizarFiltros(); sel.value = n; }
+            else { sel.value = cats[0]; }
+        }
+    }
+</script>
+</body>
+</html>
